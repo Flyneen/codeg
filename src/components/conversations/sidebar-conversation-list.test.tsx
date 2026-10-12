@@ -459,6 +459,77 @@ describe("SidebarConversationList — Pinned section (migration semantics)", () 
   })
 })
 
+// The Pinned section is the one place the sidebar flattens every folder into a
+// single list, so a pinned row names the folder it was lifted out of — the
+// folder header that answers "where does this session live" is absent there.
+describe("SidebarConversationList — pinned rows name their folder", () => {
+  const CHIP = "[data-pinned-folder-chip]"
+
+  function chipLabels(): string[] {
+    return [...document.querySelectorAll<HTMLElement>(CHIP)].map(
+      (el) => el.textContent ?? ""
+    )
+  }
+
+  beforeEach(() => {
+    const folders = [folder(1, "Folder 1"), folder(2, "Folder 2")]
+    store.activeTabId = null
+    store.tabSpec = []
+    useAppWorkspaceStore.setState({
+      folders,
+      allFolders: folders,
+      conversations: [
+        conv(11, 1),
+        conv(12, 1, { pinned_at: new Date(FIXED).toISOString() }), // pinned
+        conv(21, 2),
+      ],
+    })
+  })
+
+  it("labels the pinned row with its folder, and only that row", () => {
+    render(tree())
+    // Exactly one chip: the pinned conversation from folder 1. The unpinned
+    // rows below sit under their folder's header, which already names it.
+    expect(chipLabels()).toEqual(["Folder 1"])
+    const pinnedRow = document.querySelector(
+      "button[data-conversation-id='12']"
+    )
+    expect(pinnedRow?.querySelector(CHIP)?.textContent).toBe("Folder 1")
+    for (const id of [11, 21]) {
+      expect(
+        document
+          .querySelector(`button[data-conversation-id='${id}']`)
+          ?.querySelector(CHIP)
+      ).toBeNull()
+    }
+  })
+
+  it("follows a folder rename, so the chip never labels a stale folder", () => {
+    render(tree())
+    const renamed = [
+      { ...folder(1, "Folder 1"), name: "Renamed" },
+      folder(2, "Folder 2"),
+    ]
+    act(() => {
+      useAppWorkspaceStore.setState({ folders: renamed, allFolders: renamed })
+    })
+    expect(chipLabels()).toEqual(["Renamed"])
+  })
+
+  it("drops the chip when the pinned row's folder is gone from the workspace", () => {
+    useAppWorkspaceStore.setState({
+      conversations: [
+        conv(12, 42, { pinned_at: new Date(FIXED).toISOString() }),
+      ],
+    })
+    render(tree())
+    // Folder 42 is in neither list — the row still renders (its summary does not
+    // depend on the folder), it just has no name to show.
+    expect(document.body.textContent).toContain("conv-12")
+    expect(chipLabels()).toEqual([])
+  })
+})
+
 // jsdom has no PointerEvent and no layout, so the gesture is driven with plain
 // bubbling events plus a mocked getBoundingClientRect. This exercises the
 // component wiring (threshold → surface gating → commit/abort) that the pure

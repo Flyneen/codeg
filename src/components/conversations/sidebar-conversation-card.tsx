@@ -152,6 +152,61 @@ const HOVER_CARD_OPEN_DELAY_MS = 500
 const HOVER_CARD_CLOSE_DELAY_MS = 120
 
 /**
+ * The folder a PINNED row was lifted out of, as a chip ahead of its title.
+ *
+ * The Pinned section is the one place in the sidebar where conversations from
+ * every folder are mixed into a single flat list: the folder header that
+ * normally answers "where does this session live" is nowhere above the row, and
+ * the row itself only carries a title and — on hover — a details bubble. So a
+ * pinned row prefixes the folder's name.
+ *
+ * Deliberately a *chip*, and deliberately NOT a coloured one like
+ * `ConversationTagChip`: tags are user data with a user-chosen colour, and a
+ * pinned row already shows its tags right after the title. A neutral pill reads
+ * as metadata about the row — which part of the sidebar it was lifted out of —
+ * rather than as another tag, and it stays legible in both themes because it is
+ * built from the sidebar's own tokens.
+ *
+ * Geometry follows the row's tag chips (a `0.9375rem` box at `0.625rem` type,
+ * truncated rather than grown), so the whole row keeps one chip scale. The label
+ * is `sidebar-accent-foreground` — the pair the accent surface is defined
+ * against, so the chip clears AA wherever the sidebar's theme goes, while the
+ * title (full `sidebar-foreground` at `0.875rem`) still outranks it. `title`
+ * carries the same string as the chip for the pointer, since the label itself
+ * may be truncated on a narrow sidebar.
+ *
+ * `className` is how the call site trims the row's `gap-[0.625rem]` so the
+ * folder name and the title it labels read as one unit — the chip is only ever
+ * mounted on the pinned path, so that spacing is the caller's business, not a
+ * constant baked in here.
+ */
+function PinnedFolderChip({
+  name,
+  className,
+}: {
+  name: string
+  className?: string
+}) {
+  return (
+    <span
+      data-pinned-folder-chip
+      title={name}
+      className={cn(
+        // shrink-0: the chip is a label, not content — it truncates its own
+        // text at 6rem rather than being squeezed by a long title beside it.
+        "inline-flex h-[0.9375rem] max-w-[6rem] shrink-0 items-center",
+        "rounded-full border border-sidebar-border bg-sidebar-accent",
+        "px-[0.3125rem] text-[0.625rem] font-medium leading-none",
+        "text-sidebar-accent-foreground",
+        className
+      )}
+    >
+      <span className="min-w-0 truncate">{name}</span>
+    </span>
+  )
+}
+
+/**
  * Whether `target` was focused the KEYBOARD way.
  *
  * Radix's hover-card trigger opens on ANY focus — `onFocus:
@@ -202,6 +257,21 @@ interface SidebarConversationCardProps {
   expanded?: boolean
   /** Toggle this conversation's sub-session subtree (lazily loads on expand). */
   onToggleExpand?: (id: number) => void
+  /**
+   * The folder's display name, set ONLY when this row is rendered inside the
+   * sidebar's "Pinned" section — where it is drawn as a chip ahead of the title
+   * (see {@link PinnedFolderChip}) because that section mixes every folder's
+   * conversations into one flat list with no folder header in sight. `undefined`
+   * (every other section, and a folder the workspace can no longer name) drops
+   * the chip entirely rather than showing a placeholder.
+   *
+   * Conditional on purpose, and not an `isPinnedSection` boolean the card would
+   * pair with its own folder lookup: the lookup belongs to the list, which
+   * already holds the folder index, and passing the name only for pinned rows
+   * keeps a folder RENAME from re-rendering every memoized card that happens to
+   * sit in that folder — a renamed folder changes no ordinary row's props.
+   */
+  pinnedFolderName?: string
 }
 
 export const SidebarConversationCard = memo(function SidebarConversationCard({
@@ -220,6 +290,7 @@ export const SidebarConversationCard = memo(function SidebarConversationCard({
   hasChildren = false,
   expanded = false,
   onToggleExpand,
+  pinnedFolderName,
 }: SidebarConversationCardProps) {
   const t = useTranslations("Folder.conversationCard")
   const ime = useImeGuard()
@@ -439,6 +510,20 @@ export const SidebarConversationCard = memo(function SidebarConversationCard({
                       />
                     </div>
 
+                    {/* The folder this row was pinned out of, in front of the
+                    title. Pinned rows are the ONE place the sidebar flattens
+                    every folder into a single list, so the heading that
+                    normally answers "where does this session live" is absent
+                    and the row has to carry it itself. The `-ml-[0.25rem]`
+                    trims part of the row's `gap-[0.625rem]` so the chip and
+                    the title read as one label — the same trim the tag chips
+                    below use. */}
+                    {pinnedFolderName ? (
+                      <PinnedFolderChip
+                        name={pinnedFolderName}
+                        className="-ml-[0.25rem]"
+                      />
+                    ) : null}
                     {/* Grows into the free width only as far as its own text
                     (`max-w-max`), so the chips sit right after the title
                     rather than at the far end. A long title still yields

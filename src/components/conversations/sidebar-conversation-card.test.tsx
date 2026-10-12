@@ -71,10 +71,13 @@ function CardList({
   conversations,
   now,
   select = onSelect,
+  pinnedFolderName,
 }: {
   conversations: DbConversationSummary[]
   now: number
   select?: (id: number, agentType: string, folderId: number) => void
+  /** Set only for the Pinned-section variant, mirroring the production caller. */
+  pinnedFolderName?: string
 }) {
   return (
     <>
@@ -90,6 +93,7 @@ function CardList({
           onRename={onRename}
           onDelete={onDelete}
           onStatusChange={onStatusChange}
+          pinnedFolderName={pinnedFolderName}
         />
       ))}
     </>
@@ -211,6 +215,61 @@ describe("SidebarConversationCard pin action", () => {
     fireEvent.contextMenu(getByText("conv-2"))
     fireEvent.click(getByText("Unpin"))
     expect(onTogglePin).toHaveBeenCalledWith(2, false)
+  })
+})
+
+// A pinned row lives in the sidebar's Pinned section, which mixes every
+// folder's conversations into one flat list — the folder header that normally
+// says where a session lives is nowhere above it, so the row names its folder
+// itself. The chip is deliberately conditional on the `pinnedFolderName` prop:
+// absent (every other section) means no chip at all, never a placeholder.
+describe("SidebarConversationCard pinned folder chip", () => {
+  function renderCard(c: DbConversationSummary, pinnedFolderName?: string) {
+    return renderWithIntl(
+      <CardList
+        conversations={[c]}
+        now={NOW}
+        pinnedFolderName={pinnedFolderName}
+      />
+    )
+  }
+
+  function chip(container: HTMLElement): HTMLElement {
+    const el = container.querySelector<HTMLElement>("[data-pinned-folder-chip]")
+    if (!el) throw new Error("pinned folder chip not rendered")
+    return el
+  }
+
+  it("names the folder ahead of the title on a pinned row", () => {
+    const { container } = renderCard(conv(1), "codeg")
+    const el = chip(container)
+    // The label is the folder's own name, and the pointer gets it whole even
+    // when a narrow sidebar truncates the chip visually.
+    expect(el.textContent).toBe("codeg")
+    expect(el.getAttribute("title")).toBe("codeg")
+  })
+
+  it("puts the chip before the title, inside the row's clickable button", () => {
+    const { container } = renderCard(conv(1), "codeg")
+    const order = container.textContent ?? ""
+    expect(order.indexOf("codeg")).toBeLessThan(order.indexOf("conv-1"))
+    // Inside the row button — not a sibling of it — so the folder reads as part
+    // of the session the click selects (and assistive tech announces both).
+    const rowButton = container.querySelector(
+      "button[data-conversation-id='1']"
+    )
+    expect(rowButton?.contains(chip(container))).toBe(true)
+    expect(rowButton?.textContent).toContain("codeg")
+  })
+
+  it("renders no chip when the prop is absent (any non-pinned section)", () => {
+    const { container } = renderCard(conv(1))
+    expect(container.querySelector("[data-pinned-folder-chip]")).toBeNull()
+  })
+
+  it("renders no chip for an empty name — no placeholder stands in", () => {
+    const { container } = renderCard(conv(1), "")
+    expect(container.querySelector("[data-pinned-folder-chip]")).toBeNull()
   })
 })
 

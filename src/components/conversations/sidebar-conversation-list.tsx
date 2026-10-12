@@ -3073,6 +3073,19 @@ export function SidebarConversationList({
     // No folder tint reaches this row: a card always renders in the app theme,
     // whichever colour its folder carries. The colour is a label for the FOLDER,
     // not a skin for the sessions inside it.
+    //
+    // Pinned rows carry the folder's NAME instead: that section is the one place
+    // the sidebar mixes folders, so the header above the row cannot say where the
+    // session came from (see `buildRows`' pinned branch). The lookup rides the
+    // list's existing `folderIndex` — one subscription for the whole list — and
+    // is passed to NO other row, which is what keeps a folder rename from
+    // re-rendering every memoized card sitting in that folder. `allFolders`
+    // backs it, so a folder the user has merely CLOSED still names itself; a
+    // folder gone from the workspace resolves to `undefined` and the row drops
+    // the chip rather than inventing a label.
+    const pinnedFolderName = row.pinned
+      ? folderIndex.get(conv.folder_id)?.name
+      : undefined
     return (
       <SidebarConversationCard
         conversation={conv}
@@ -3096,6 +3109,7 @@ export function SidebarConversationList({
         hasChildren={conv.child_count > 0}
         expanded={conversationExpanded.has(conv.id)}
         onToggleExpand={toggleConversation}
+        pinnedFolderName={pinnedFolderName}
       />
     )
   }

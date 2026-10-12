@@ -916,6 +916,20 @@ export interface ConversationRow {
    * Absent — never `false` — so existing row-shape assertions are unaffected.
    */
   recent?: true
+  /**
+   * Set (only) on the row the "Pinned" section emits for a pinned conversation,
+   * and on nothing else. Its one reader is the card, which uses it to prefix that
+   * row's title with the folder the conversation came from: the Pinned section
+   * flattens every folder into one list, so nothing above the row says where the
+   * session lives.
+   *
+   * Never set on a pinned conversation's delegation children — those rows render
+   * under the flagged one, which already carries the folder — nor on any row in
+   * the Folders / Chat / Recent sections, whose folder header or flat-list
+   * context already answers the question. Never `false`, so existing row-shape
+   * assertions are unaffected.
+   */
+  pinned?: true
 }
 
 export interface EmptyHintRow {
@@ -1329,6 +1343,14 @@ export function buildRows(args: {
     })
     if (pinnedExpanded) {
       for (const conv of pinned) {
+        // Flag the row `pushConversationRow` is about to push, rather than
+        // pushing one here as well: that helper writes the conversation's own
+        // row FIRST (the flag has to land on that row, not on a copy of it), and
+        // a second `rows.push` would put the same card on screen twice. Its
+        // nested rows follow unflagged, like every other nested row — and like
+        // the section's other root-only marks (no pin action, no status toggle,
+        // no tag chips).
+        const rowIndex = rows.length
         pushConversationRow(
           rows,
           conv,
@@ -1337,6 +1359,8 @@ export function buildRows(args: {
           childrenByParent,
           childrenLoading
         )
+        const row = rows[rowIndex] as ConversationRow
+        row.pinned = true
       }
     }
   }

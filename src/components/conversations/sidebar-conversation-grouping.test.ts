@@ -474,6 +474,9 @@ describe("buildRows", () => {
       kind: "conversation",
       conversation: p1,
       depth: 0,
+      // Flagged as a Pinned-section row: that is what makes the card prefix the
+      // title with the folder it was pinned out of.
+      pinned: true,
     })
     expect(rows[2]).toEqual({
       kind: "section",
@@ -513,6 +516,64 @@ describe("buildRows", () => {
     expect(
       rows.some((r) => r.kind === "section" && r.section === "pinned")
     ).toBe(false)
+  })
+
+  // The flag is what tells the card to name the folder a pinned row came from,
+  // so it has to be set on exactly one row per pinned ROOT conversation: the
+  // pinned row itself, never the subtree hanging under it.
+  it("flags the pinned row — and only it — with `pinned`", () => {
+    const p1 = conv(1, 10, {
+      pinned_at: new Date(2000).toISOString(),
+      child_count: 1,
+    })
+    const kid = conv(100, 10, { parent_id: 1 })
+    const unpinned = conv(2, 10)
+    const rows = buildRows({
+      pinned: [p1],
+      pinnedExpanded: true,
+      orderedFolderIds: [10],
+      byFolder: new Map([[10, [unpinned]]]),
+      folderExpanded: { 10: true },
+      folderTotalCounts: new Map([[10, 1]]),
+      foldersExpanded: true,
+      chatConversations: [],
+      chatsExpanded: true,
+      conversationExpanded: new Set([1]),
+      childrenByParent: new Map([[1, [kid]]]),
+    })
+    expect(rows.filter((r) => r.kind === "conversation")).toEqual([
+      // The pinned root row carries the flag…
+      { kind: "conversation", conversation: p1, depth: 0, pinned: true },
+      // …its delegation child does not: the parent row is the one on screen in
+      // the Pinned section, and a child wears none of that section's other
+      // marks either (no pin action, no status toggle, no tag chips).
+      { kind: "conversation", conversation: kid, depth: 1 },
+      // Nor does the ordinary row of an unpinned conversation below.
+      { kind: "conversation", conversation: unpinned, depth: 0 },
+    ])
+  })
+
+  it("keeps the `pinned` flag off the same conversation's ordinary rows", () => {
+    // A pinned conversation is lifted OUT of its folder bucket (it lives in the
+    // Pinned section only), so its one and only row is the flagged one — the
+    // flag can never leak onto a second row of the same conversation.
+    const p1 = conv(1, 10, { pinned_at: new Date(2000).toISOString() })
+    const rows = buildRows({
+      pinned: [p1],
+      pinnedExpanded: true,
+      orderedFolderIds: [10],
+      byFolder: new Map([[10, []]]),
+      folderExpanded: { 10: true },
+      folderTotalCounts: new Map([[10, 0]]),
+      foldersExpanded: true,
+      chatConversations: [],
+      chatsExpanded: true,
+    })
+    const mine = rows.filter(
+      (r) => r.kind === "conversation" && r.conversation.id === 1
+    )
+    expect(mine).toHaveLength(1)
+    expect(mine[0]).toMatchObject({ pinned: true })
   })
 
   it("emits a flat Chat section below the folders section", () => {
